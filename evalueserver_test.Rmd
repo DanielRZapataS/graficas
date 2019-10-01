@@ -1,0 +1,144 @@
+---
+title: "Evalueserver test"
+author: "Daniel Zapata"
+date: "1 de octubre de 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+options(scipen=999)
+library(data.table)
+library(ggplot2)
+library(dplyr)
+library(stringr)
+library(tidyverse)
+library(gtools)
+library("tidyr")
+
+```
+
+```{r data, include=FALSE}
+base_line <- fread("datos/baseline.csv")
+year_later <- fread("datos/year_later.csv")
+head(base_line)
+head(year_later)
+str(base_line)
+```
+
+```{r}
+str(year_later)
+```
+```{r}
+common_clients <- intersect(base_line$cust_hh_id, year_later$cust_hh_id)
+length(common_clients)
+nrow(base_line) - length(common_clients)
+uniqueN(c(base_line$cust_hh_id, year_later$cust_hh_id))
+```
+
+In both tables  there is 40394 clients, however  38825 of 41422 of total are in both tables
+
+```{r}
+table <- rbindlist(list(base_line, year_later))
+table <- table[cust_hh_id %in% common_clients]
+names(table) <- tolower(names(table))
+```
+
+```{r}
+table[, .N, by = vintage]
+```
+
+```{r}
+balance_vars <- names(table)[ grep(pattern = "_b", str_sub(names(table), -2, -1))]
+count_vars <- names(table)[grep(pattern = "_c", str_sub(names(table), -2, -1))]
+table[, vintage := factor(vintage, levels = c(0, 12), labels = c("base_line", "year_later"), ordered = T)]
+```
+
+# balance vars analysis 
+
+```{r}
+ggplot(table[annuity_b > 0], aes(y=annuity_b, fill=vintage)) + 
+  geom_boxplot()
+```
+```{r}
+vars_plot <- data.table(balance_vars = balance_vars)
+vars_plot[, var := gsub("_b", "", balance_vars)]
+count_vars <- data.table(count_vars = count_vars)
+count_vars[, var := gsub("_c", "", count_vars)]
+vars_plot <- merge(vars_plot, count_vars, by = "var")
+```
+
+```{r}
+balance_vars
+i = 1
+for (i in 1:nrow(vars_plot)) {
+  product_plot <-
+    table[get(vars_plot[i, count_vars]) > 0, mget(c("vintage", vars_plot[i, balance_vars]))]
+  names(product_plot)[2] <- "var"
+  p1 <- ggplot(product_plot, aes(y = var, fill = vintage)) +
+    geom_boxplot() +
+    labs(title = paste("Distribution of", vars_plot[i, var], "balance"),
+         y = vars_plot[i, var])
+  ggsave(paste0("plots/", vars_plot[i, balance_vars], ".png"),
+         p1)
+}
+```
+# clients value 
+```{r}
+aux <- table[, .N, by = .(vintage, hv_type)]
+
+ggplot(data = aux, aes(x = hv_type, y = N, fill = vintage)) +
+  geom_bar(stat = "identity",
+  color = "black",
+  position = position_dodge())+
+    labs(title = paste("Distribution of clients value"),
+         y = "count", x ="High value")
+  
+```
+
+
+```{r}
+product_plot <- table[, mget(c("vintage", "hv_type", balance_vars))]
+product_plot <- melt(product_plot, id.vars = c("vintage", "hv_type"), variable.name = "product", value.name = "balance")
+product_plot <- product_plot[balance != 0, .( clients = .N), by = .(vintage, hv_type, product)]
+
+ggplot(data = product_plot, aes(x = hv_type, y = clients, fill = product)) +
+  geom_bar(stat = "identity",
+  color = "black",
+  position = position_dodge())+
+    labs(title = paste("Distribution of number of clients by product"),
+         y = "count", x ="High value") +
+  facet_grid(~ vintage, switch = "x", scales = "free_x", space = "free_x")
+  
+```
+ We can see an increase a dramatically increase in brokerage accounts in every
+ client group. The most biggest fall on clients is in non interest bank
+ 
+
+```{r}
+product_plot <- table[, mget(c("vintage", "hv_type", balance_vars))]
+product_plot <- melt(product_plot, id.vars = c("vintage", "hv_type"), variable.name = "product", value.name = "balance")
+product_plot <- product_plot[balance > 0, .(balance = sum(balance), clients = .N), by = .(vintage, hv_type, product)]
+product_plot[, mean_balance := balance/clients]
+product_plot[, mean_balance_qut := quantcut(mean_balance, q = 5, dig.lab = 5)]
+product_plot[, hv_type := factor(hv_type)]
+```
+
+```{r}
+ggplot(data = product_plot, mapping = aes(x = hv_type,
+                                                       y = product,
+                                                       fill = mean_balance_qut)) +
+  geom_tile() +
+  facet_grid(~ vintage, switch = "x", scales = "free_x", space = "free_x")
+```
+The plot shows the relatiion between balances and clients on different products comparig on two time frames or vintage. the indicator can increse (decreases) if balances are higher (lower) or number of clients goes down (up), thus is an alerts of 
+products like student loan, credit carts, mortgage, and annuty are very stables. On teh other hand ther are product that show increases and decreases on their balance-clients indicator.
+
+# product count
+```{r}
+vars_plot
+```
+
