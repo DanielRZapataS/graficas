@@ -1,0 +1,42 @@
+﻿Column;Description;;
+cust_hh_id;Unique Household Identification;;
+Vintage;0 = baseline, 12 = 1 year later;;
+ANNUITY_B;Annuity Balance;pesion;pasivo
+ANNUITY_C;Annuity Account Count;;pasivo
+ATM_C;Count of ATM Transactions;;pasivo
+LOC_HOME_EQ_B;Home Equity Balances;valos de la cas;pasivo
+LOC_HOME_EQ_C;Home Equity Account Count;;pasivo
+BROK_RETL_FULL_B;Brokerage Balance;cuenta de inversion;pasivo
+BROK_RETL_FULL_C;Brokerage Account Count;;pasivo
+DEBIT_C;Count of Total Debit Cards;;pasivo
+BPY_FLAG;Billpay indicator;pago de servicios;
+CHECK_INT_BEARING_C;Interest Bearing Checking Account Count;cuenta de ahorros que paga intereses;pasivo
+CHECK_INT_BEARING_B;Interest Bearing Checking Balances;;pasivo
+CHECK_NON_INTB_C;Non-Interest Bearing Checking Account Count;cuenta de ahorros que no paga intereses/corriente;pasivo
+CHECK_NON_INTB_B;Non-Interest Bearing Checkign Account Balance;;pasivo
+CREDIT_CARD_B;Credit Card Balance;tarjeta de credito;activo
+CREDIT_CARD_C;Credit Card Account Count;;activo
+SBX_FLAG;Safe Depost Box indictator;boveda;
+HH_REVENUE;Household Revenue;ingresos del hogar;crm
+HV_TYPE;High Value 01 - High Value 05, with 01 being the lowest, HHs can have no HV indicator;indice dse valor;crm
+MORTGAGE_LOAN_B;Mortgage Balance;hipoteca;activo
+MORTGAGE_LOAN_C;Mortgage Account Count;;activo
+SAVINGS_CERT_B;Certificate of Deposit Balance;cdt;pasivo
+SAVINGS_CERT_C;Certificate of Deposit Account Count;;pasivo
+SAV_FLAG;Savings Account Indicator;cuenta de ahorros;pasivo
+STUDENT_LOAN_B;Student Loan Balance;credito estudiantil;activo
+STUDENT_LOAN_C;Student Loan Account Count;;activo
+TOT_XSELL_C;Cross-Sell for HH;venta cruzada hogar;crm
+store_skey;Store Household most frequently uses;;
+group_nm;Top Region of Store Household most frequently uses;;
+reg_nm;Region of Store Household most frequently uses;;
+domain_c;Count of Domains (investor, mortgage, transactor, etc.);;
+investor_flag;Indicates household owns a WF investing product (brokerage);;
+mortgage_flag;Indicates household owns a WF mortgage;;
+transactor_flag;Indicates household owns a WF transacting product (checking);;
+retire_flag;Indicates household owns a WF retirement product (brokerage IRA, CD IRA);;
+saver_flag;Indicates household owns a WF savings product (savings, money market, cd);;
+borrower_flag;Indicates household owns a WF borrowing product (credit card, home equity, student loans, etc.);;
+protector_flag;Indicates household owns a WF protecting product (insurance, identity theft protection, safe box);;
+IXI_DRVD_TOT_ASSET_AMT;Estimate of Total Assets Held in the US (may be less than WF Assets as it is an estimate for each HH);;
+WF_TOT_ASSET_AMT;Total Assets with Wells Fargo;;
