@@ -18,6 +18,8 @@ library(stringr)
 library(tidyverse)
 library(gtools)
 library("tidyr")
+library(varhandle)
+library(clValid)
 
 ```
 
@@ -48,13 +50,13 @@ names(table) <- tolower(names(table))
 ```
 
 ```{r}
+table[, vintage := factor(vintage, levels = c(0, 12), labels = c("base_line", "year_later"), ordered = T)]
 table[, .N, by = vintage]
 ```
 
 ```{r}
 balance_vars <- names(table)[ grep(pattern = "_b", str_sub(names(table), -2, -1))]
 count_vars <- names(table)[grep(pattern = "_c", str_sub(names(table), -2, -1))]
-table[, vintage := factor(vintage, levels = c(0, 12), labels = c("base_line", "year_later"), ordered = T)]
 ```
 
 # balance vars analysis 
@@ -65,10 +67,11 @@ ggplot(table[annuity_b > 0], aes(y=annuity_b, fill=vintage)) +
 ```
 ```{r}
 vars_plot <- data.table(balance_vars = balance_vars)
-vars_plot[, var := gsub("_b", "", balance_vars)]
+vars_plot[, var := str_sub(balance_vars,-20,  -3 )]
 count_vars <- data.table(count_vars = count_vars)
-count_vars[, var := gsub("_c", "", count_vars)]
+count_vars[, var := str_sub(count_vars,-20,  -3 )]
 vars_plot <- merge(vars_plot, count_vars, by = "var")
+vars_plot
 ```
 
 ```{r}
@@ -90,13 +93,15 @@ for (i in 1:nrow(vars_plot)) {
 ```{r}
 aux <- table[, .N, by = .(vintage, hv_type)]
 
-ggplot(data = aux, aes(x = hv_type, y = N, fill = vintage)) +
+p1 <- ggplot(data = aux, aes(x = hv_type, y = N, fill = vintage)) +
   geom_bar(stat = "identity",
   color = "black",
   position = position_dodge())+
     labs(title = paste("Distribution of clients value"),
          y = "count", x ="High value")
-  
+ ggsave(paste0("plots/", "clients_value", ".png"),
+         p1)  
+ p1
 ```
 
 
@@ -105,13 +110,16 @@ product_plot <- table[, mget(c("vintage", "hv_type", balance_vars))]
 product_plot <- melt(product_plot, id.vars = c("vintage", "hv_type"), variable.name = "product", value.name = "balance")
 product_plot <- product_plot[balance != 0, .( clients = .N), by = .(vintage, hv_type, product)]
 
-ggplot(data = product_plot, aes(x = hv_type, y = clients, fill = product)) +
+p1 <- ggplot(data = product_plot, aes(x = hv_type, y = clients, fill = product)) +
   geom_bar(stat = "identity",
   color = "black",
   position = position_dodge())+
     labs(title = paste("Distribution of number of clients by product"),
          y = "count", x ="High value") +
   facet_grid(~ vintage, switch = "x", scales = "free_x", space = "free_x")
+ ggsave(paste0("plots/", "clients_value_product", ".png"),
+         p1)  
+ p1
   
 ```
  We can see an increase a dramatically increase in brokerage accounts in every
@@ -128,11 +136,17 @@ product_plot[, hv_type := factor(hv_type)]
 ```
 
 ```{r}
-ggplot(data = product_plot, mapping = aes(x = hv_type,
+p1 <- ggplot(data = product_plot, mapping = aes(x = hv_type,
                                                        y = product,
                                                        fill = mean_balance_qut)) +
   geom_tile() +
-  facet_grid(~ vintage, switch = "x", scales = "free_x", space = "free_x")
+  facet_grid(~ vintage, switch = "x", scales = "free_x", space = "free_x") +
+  labs(fill = "Mean balance") +
+  labs(title = paste("Heat map of mean balance"),
+         y = "Products", x ="High value")
+ ggsave(paste0("plots/", "mean_balance", ".png"),
+         p1)  
+ p1
 ```
 The plot shows the relatiion between balances and clients on different products comparig on two time frames or vintage. the indicator can increse (decreases) if balances are higher (lower) or number of clients goes down (up), thus is an alerts of 
 products like student loan, credit carts, mortgage, and annuty are very stables. On teh other hand ther are product that show increases and decreases on their balance-clients indicator.
@@ -140,5 +154,480 @@ products like student loan, credit carts, mortgage, and annuty are very stables.
 # product count
 ```{r}
 vars_plot
+```
+```{r}
+product_plot
+```
+
+```{r}
+product_plot <- table[, mget(c("vintage", count_vars$count_vars))]
+product_plot <- melt(product_plot, id.vars = c("vintage"), variable.name = "product", value.name = "count")
+product_plot <- product_plot[count > 1, .(count = sum(count), clients = .N), by = .(vintage, product)]
+product_plot[, count_mean := count/clients]
+```
+
+```{r}
+p1 <- ggplot(data = product_plot, aes(x = product, y = count_mean, fill = vintage)) +
+  geom_bar(stat = "identity",
+  color = "black",
+  position = position_dodge()) +
+  theme(axis.text.x = element_text( angle = -45))
+ggsave(paste0("plots/", "mean_count", ".png"),
+         p1)  
+p1
+  
+```
+# cluster
+```{r}
+table_clus <- table[, mget(c("cust_hh_id", "vintage", "bpy_flag", "hh_revenue",vars_plot$balance_vars, vars_plot$count_vars))]
+table_clus[, bpy_flag := factor(bpy_flag)]
+sapply(table_clus, summary)
+inspect.na(as.data.frame(table_clus))
+```
+
+```{r}
+pca1 <- prcomp(table_clus[vintage == "base_line", -c("vintage", "cust_hh_id", "bpy_flag")] , center = TRUE, scale. = TRUE)
+summary(pca1)
+```
+11 of 19 components agregate 80% percent of the total variance
+```{r}
+pca2 <- prcomp(table_clus[vintage == "year_later", -c("vintage", "cust_hh_id","bpy_flag")] , center = TRUE, scale. = TRUE)
+summary(pca2)
+```
+don't chnge to much from one yer to another. populations is almost the same
+```{r}
+table_clus[, .N, by = vintage]
+```
+
+## kmeans 
+```{r}
+kmeans_results <- list()
+# wss <- rep(0, times = max_k)
+# kmeans_models <- list()
+max_k = 40
+nstart = 20
+pb <- txtProgressBar(min = 0, max = max_k, style = 3)
+# i = 1
+set.seed(123)
+clients_cluster <- table_clus[vintage == "base_line" , -c("vintage", "hv_type", "hh_revenue")]
+sample_clients <- sample(clients_cluster$cust_hh_id, nrow(clients_cluster)*0.1)
+clients_cluster <- clients_cluster[which(clients_cluster$cust_hh_id %in% sample_clients)]
+sample_clients <- clients_cluster$cust_hh_id
+clients_cluster[, cust_hh_id := NULL]
+clients_cluster
+```
+
+
+```{r}
+i = 2
+for (i in 2:max_k) {
+  model <- kmeans(clients_cluster, centers = i, nstart = nstart, iter.max = 30)
+  
+  clients_cluster_data <- data.table(id = sample_clients,
+                                cluster = model$cluster)
+  kmeans_results[[i]] <-
+    list(model = model,
+         clients_cluster = clients_cluster_data)
+  
+  
+  setTxtProgressBar(pb, i)
+}
+
+saveRDS(kmeans_results,"models/kmeans_results.rds")
+```
+
+```{r}
+tss_wss <- c()
+dunn_km <- c()
+ftest <- c()
+n <- nrow(clients_cluster)
+pb <- txtProgressBar(min = 0, max = max_k, style = 3)
+i = 2
+for(i in 2:max_k){
+  model <-  kmeans_results[[i]]$model
+  tss_wss[i] <-  model$tot.withinss/model$totss
+  dunn_km[i] <- dunn(clusters = model$cluster, Data = clients_cluster)
+  ftest[i] <-  ( model$betweenss/(i-1))/( model$tot.withinss/(n-i) )
+  print(paste("ratio wss/tss of k = :", i, "is", tss_wss[i]))
+  print(paste("Dunn's distance of k = :", i, "is",dunn_km[i]))
+  print(paste("Pseudo F test k = :", i, "is",ftest[i]))
+  setTxtProgressBar(pb, i)
+}
+```
+
+```{r}
+# save metrics
+save(tss_wss, dunn_km, ftest,
+     file =  "models/metrics_results.RData")
+#grafica de wss tss
+png("plots/models/wss_tss.png")
+plot(2:max_k,
+     tss_wss[-1],
+     type = "b",
+     xlab = "Number of Clusters",
+     ylab = "WSS/TSS")  
+dev.off()
+
+#grafica dnn
+png("plots/models/dnn.png")
+plot(2:max_k,
+     dunn_km[-1],
+     type = "b",
+     xlab = "Number of Clusters",
+     ylab = "Dunn's distance")  
+dev.off()
+
+#grafica f test 
+png("plots/models/ftest.png")
+plot(2:max_k,
+     ftest[-1],
+     type = "b",
+     xlab = "Number of Clusters",
+     ylab = "Pseudo F test")  
+dev.off()
+
+```
+
+clusters are really unstable
+### index
+```{r}
+table_clus <- table[, mget(c("cust_hh_id", "hv_type","vintage", "bpy_flag", "hh_revenue",vars_plot$balance_vars, vars_plot$count_vars))]
+table_clus[hv_type == "", hv_type := "NONE"]
+table_clus[, hv_type := factor(hv_type)]
+table_clus[, bpy_flag := factor(bpy_flag)]
+table_clus
+```
+
+```{r}
+debt_products <- c("annuity", "brok_retl_full", "check_int_bearing","check_non_intb", "savings_cert")
+credit_products <- c("loc_home_eq", "mortgage_loan", "student_loan", "credit_card")
+table_clus[, debt_count := rowSums(.SD), .SDcols = paste0(debt_products, "_c")]
+table_clus[, credit_count := rowSums(.SD), .SDcols = paste0(credit_products, "_c")]
+```
+
+```{r}
+table_clus[, debt_index := (annuity_b*annuity_c + brok_retl_full_b*brok_retl_full_c + check_int_bearing_b*check_int_bearing_c + check_non_intb_b*check_non_intb_c + savings_cert_b*savings_cert_c)/debt_count]
+table_clus[, credit_index := (loc_home_eq_b*loc_home_eq_c + mortgage_loan_b*mortgage_loan_c + student_loan_b*student_loan_c + credit_card_b*credit_card_c)/credit_count]
+table_clus[is.nan(debt_index), debt_index := 0]
+table_clus[is.nan(credit_index), credit_index := 0]
+```
+
+
+
+# outliers 
+
+```{r}
+cut_index <- c()
+aux <- summary(table_clus$debt_index)
+cut_index[1] <- aux[5] + (aux[5]- aux[2])*1.5
+aux <- summary(table_clus$credit_index)
+cut_index[2] <- aux[5] + (aux[5]- aux[2])*1.5
+```
+
+
+
+```{r}
+p1 <- ggplot(table_clus[debt_index < cut_index[1] &
+                    credit_index < cut_index[2] & debt_index > 0 & credit_index > 0],
+                    aes(
+                    x = debt_index,
+                    y = credit_index,
+                    color = hv_type
+                    )) + geom_point() +
+                    facet_grid( ~ vintage,
+                    switch = "x",
+                    scales = "free_x",
+                    space = "free_x") +
+                    labs(
+                    title = paste("Scatter plot of credit and debt indexes"),
+                    y = "Credit Index",
+                    x = "Debt Index", 
+                    color = "Houshold's value"
+                    )
+ ggsave(paste0("plots/", "index_products", ".png"),
+         p1)  
+ p1
+                    
+```
+
+```{r}
+kmeans_results <- list()
+# wss <- rep(0, times = max_k)
+# kmeans_models <- list()
+max_k = 40
+nstart = 20
+pb <- txtProgressBar(min = 0, max = max_k, style = 3)
+# i = 1
+set.seed(123)
+clients_cluster <- table_clus[vintage == "base_line" & debt_index < cut_index[1] &
+                    credit_index < cut_index[2], .(cust_hh_id, debt_index, credit_index)]
+sample_clients <- sample(clients_cluster$cust_hh_id, nrow(clients_cluster)*0.1)
+clients_cluster <- clients_cluster[which(clients_cluster$cust_hh_id %in% sample_clients)]
+sample_clients <- clients_cluster$cust_hh_id
+clients_cluster[, cust_hh_id := NULL]
+```
+```{r}
+ ggplot(clients_cluster,
+                    aes(
+                    x = debt_index,
+                    y = credit_index
+                    )) + geom_point() +
+                    labs(
+                    title = paste("Clusters of kmeans"),
+                    y = "Credit Index",
+                    x = "Debt Index"
+                    )
+```
+
+```{r}
+i = 2
+for (i in 2:max_k) {
+  model <- kmeans(clients_cluster,centers = i, nstart = nstart, iter.max = 30)
+  
+  clients_cluster_data <- data.table(id = sample_clients,
+                                cluster = model$cluster)
+  kmeans_results[[i]] <-
+    list(model = model,
+         clients_cluster = clients_cluster_data)
+  
+  
+  setTxtProgressBar(pb, i)
+}
+
+saveRDS(kmeans_results,"models/kmeans_results_index.rds")
+```
+
+```{r}
+tss_wss <- c()
+dunn_km <- c()
+ftest <- c()
+n <- nrow(clients_cluster)
+pb <- txtProgressBar(min = 0, max = max_k, style = 3)
+i = 2
+for(i in 2:max_k){
+  model <-  kmeans_results[[i]]$model
+  tss_wss[i] <-  model$tot.withinss/model$totss
+  dunn_km[i] <- dunn(clusters = model$cluster, Data = clients_cluster)
+  ftest[i] <-  ( model$betweenss/(i-1))/( model$tot.withinss/(n-i) )
+  print(paste("ratio wss/tss of k = :", i, "is", tss_wss[i]))
+  print(paste("Dunn's distance of k = :", i, "is",dunn_km[i]))
+  print(paste("Pseudo F test k = :", i, "is",ftest[i]))
+  setTxtProgressBar(pb, i)
+}
+```
+
+```{r}
+# save metrics
+save(tss_wss, dunn_km, ftest,
+     file =  "models/metrics_results_index.RData")
+#grafica de wss tss
+png("plots/models/wss_tss_index.png")
+plot(2:max_k,
+     tss_wss[-1],
+     type = "b",
+     xlab = "Number of Clusters",
+     ylab = "WSS/TSS")  
+dev.off()
+
+#grafica dnn
+png("plots/models/dnn_index.png")
+plot(2:max_k,
+     dunn_km[-1],
+     type = "b",
+     xlab = "Number of Clusters",
+     ylab = "Dunn's distance")  
+dev.off()
+
+#grafica f test 
+png("plots/models/ftest_index.png")
+plot(2:max_k,
+     ftest[-1],
+     type = "b",
+     xlab = "Number of Clusters",
+     ylab = "Pseudo F test")  
+dev.off()
+```
+```{r}
+kmeans_results <- list()
+# wss <- rep(0, times = max_k)
+# kmeans_models <- list()
+max_k = 40
+nstart = 20
+pb <- txtProgressBar(min = 0, max = max_k, style = 3)
+# i = 1
+set.seed(123)
+clients_cluster <- table_clus[vintage == "base_line" & debt_index < cut_index[1] &
+                    credit_index < cut_index[2], .(cust_hh_id, debt_index, credit_index, hh_revenue)]
+clients_cluster[, debt_index := scale(debt_index)]
+clients_cluster[, credit_index := scale(credit_index)]
+clients_cluster[, hh_revenue := scale(hh_revenue)]
+sample_clients <- sample(clients_cluster$cust_hh_id, nrow(clients_cluster)*0.1)
+clients_cluster <- clients_cluster[which(clients_cluster$cust_hh_id %in% sample_clients)]
+sample_clients <- clients_cluster$cust_hh_id
+clients_cluster[, cust_hh_id := NULL]
+```
+```{r}
+ ggplot(clients_cluster,
+                    aes(
+                    x = debt_index,
+                    y = credit_index
+                    )) + geom_point() +
+                    labs(
+                    title = paste("Clusters of kmeans"),
+                    y = "Credit Index",
+                    x = "Debt Index"
+                    )
+```
+
+```{r}
+i = 2
+for (i in 2:max_k) {
+  model <- kmeans(clients_cluster, centers = i, nstart = nstart, iter.max = 30)
+  
+  clients_cluster_data <- data.table(id = sample_clients,
+                                cluster = model$cluster)
+  kmeans_results[[i]] <-
+    list(model = model,
+         clients_cluster = clients_cluster_data)
+  
+  
+  setTxtProgressBar(pb, i)
+}
+
+saveRDS(kmeans_results,"models/kmeans_results_index_revenue.rds")
+```
+```{r}
+tss_wss <- c()
+dunn_km <- c()
+ftest <- c()
+n <- nrow(clients_cluster)
+pb <- txtProgressBar(min = 0, max = max_k, style = 3)
+i = 2
+for(i in 2:max_k){
+  model <-  kmeans_results[[i]]$model
+  tss_wss[i] <-  model$tot.withinss/model$totss
+  dunn_km[i] <- dunn(clusters = model$cluster, Data = clients_cluster)
+  ftest[i] <-  ( model$betweenss/(i-1))/( model$tot.withinss/(n-i) )
+  print(paste("ratio wss/tss of k = :", i, "is", tss_wss[i]))
+  print(paste("Dunn's distance of k = :", i, "is",dunn_km[i]))
+  print(paste("Pseudo F test k = :", i, "is",ftest[i]))
+  setTxtProgressBar(pb, i)
+}
+```
+
+```{r}
+# save metrics
+save(tss_wss, dunn_km, ftest,
+     file =  "models/metrics_results.RData")
+#grafica de wss tss
+png("plots/models/wss_tss_index_revenue.png")
+plot(2:max_k,
+     tss_wss[-1],
+     type = "b",
+     xlab = "Number of Clusters",
+     ylab = "WSS/TSS")  
+dev.off()
+
+#grafica dnn
+png("plots/models/dnn_index_revenue.png")
+plot(2:max_k,
+     dunn_km[-1],
+     type = "b",
+     xlab = "Number of Clusters",
+     ylab = "Dunn's distance")  
+dev.off()
+
+#grafica f test 
+png("plots/models/ftest_index_revenue.png")
+plot(2:max_k,
+     ftest[-1],
+     type = "b",
+     xlab = "Number of Clusters",
+     ylab = "Pseudo F test")  
+dev.off()
+```
+```{r}
+final_model <- readRDS("models/kmeans_results_index.rds")
+k = 6
+clients_cluster_data <- final_model[[k]]$clients_cluster
+
+```
+
+```{r}
+cluster_plot <- table_clus[cust_hh_id %in% clients_cluster_data$id & vintage == "base_line", .(cust_hh_id, debt_index, credit_index, hh_revenue)]
+cluster_plot <- merge(cluster_plot, clients_cluster_data, by.x = "cust_hh_id", by.y = "id")
+cluster_plot[, cluster := factor(cluster)]
+```
+
+```{r}
+ggplot(cluster_plot,
+                    aes(
+                    x = debt_index,
+                    y = credit_index
+                    )) + geom_point() +
+                    labs(
+                    title = paste("Clusters of kmeans"),
+                    y = "Credit Index",
+                    x = "Debt Index"
+                    )
+```
+
+```{r}
+p1 <- ggplot(cluster_plot,
+                    aes(
+                    x = debt_index,
+                    y = credit_index,
+                    color = cluster
+                    )) + geom_point() +
+                    labs(
+                    title = paste("Clusters of kmeans"),
+                    y = "Credit Index",
+                    x = "Debt Index", 
+                    color = "Clusters"
+                    )
+ ggsave(paste0("plots/", "cluster_base_line", ".png"),
+         p1)  
+ p1
+```
+```{r}
+cluster_plot <- table_clus[cust_hh_id %in% clients_cluster_data$id & vintage == "year_later", .(cust_hh_id, debt_index, credit_index, hh_revenue)]
+cluster_plot <- merge(cluster_plot, clients_cluster_data, by.x = "cust_hh_id", by.y = "id")
+cluster_plot[, cluster := factor(cluster)]
+```
+
+```{r}
+p1 <- ggplot(cluster_plot,
+                    aes(
+                    x = debt_index,
+                    y = credit_index,
+                    color = cluster
+                    )) + geom_point() +
+                    labs(
+                    title = paste("Clusters of kmeans"),
+                    y = "Credit Index",
+                    x = "Debt Index", 
+                    color = "Clusters"
+                    )
+ ggsave(paste0("plots/", "cluster_year_later", ".png"),
+         p1)  
+ p1
+```
+
+```{r}
+p1 <- ggplot(cluster_plot[debt_index< cut_index[1] & credit_index < cut_index[2]],
+                    aes(
+                    x = debt_index,
+                    y = credit_index,
+                    color = cluster
+                    )) + geom_point() +
+                    labs(
+                    title = paste("Clusters of kmeans"),
+                    y = "Credit Index",
+                    x = "Debt Index", 
+                    color = "Clusters"
+                    )
+ ggsave(paste0("plots/", "cluster_year_later_zoom", ".png"),
+         p1)  
+ p1
 ```
 
